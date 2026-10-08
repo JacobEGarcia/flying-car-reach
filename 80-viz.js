@@ -1,7 +1,17 @@
 // Flying-car reach visualisation. Plain canvas, no dependencies.
 const LAYERS = { near: { R: 45, N: 360 }, mid: { R: 150, N: 375 }, wide: { R: 400, N: 400 } };
 const P = 1200;
-const COL = { car: '#34465f', a: '#b3262e', b: '#e3661f', c: '#d9a21b', ink: '#1b1a17', bg: '#e9e8e3' };
+const PALS = {
+  light: { car: '#34465f', a: '#b3262e', b: '#e3661f', c: '#d9a21b', cdark: '#a8730c', ink: '#1b1a17', bg: '#e9e8e3', panel: '#fff', mute: '#85827a', ter: '104,107,103', carFill: 'rgba(52,70,95,0.10)', carStroke: 'rgba(40,56,80,0.9)', shadow: 'rgba(0,0,0,.16)' },
+  dark: { car: '#8fb4e6', a: '#ff6f74', b: '#ff9a52', c: '#f3c24f', cdark: '#f3c24f', ink: '#ecebe6', bg: '#14171c', panel: '#252930', mute: '#9a9a94', ter: '176,180,176', carFill: 'rgba(143,180,230,0.12)', carStroke: 'rgba(143,180,230,0.85)', shadow: 'rgba(0,0,0,.5)' },
+};
+const COL = Object.assign({}, PALS.light);
+export function currentTheme() { return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'; }
+export function applyTheme(name) {
+  const t = name === 'dark' ? 'dark' : 'light'; Object.assign(COL, PALS[t]); document.documentElement.dataset.theme = t;
+  window.dispatchEvent(new CustomEvent('fcv-theme', { detail: t }));
+}
+Object.assign(COL, PALS[currentTheme()]);
 const fmtMin = (m) => (m >= 60 ? `${Math.floor(m / 60)} hr${m % 60 ? ' ' + (m % 60) : ''}` : `${m} min`);
 const fmtN = (n) => Math.round(n).toLocaleString('en-US');
 let seed = 7;
@@ -37,7 +47,7 @@ function renderTerrain(grid, N, R, ex) {
     const dark = 0.14 + 0.62 * (1 - shade) + 0.22 * Math.min(1, elevOf(v) / 2500);
     if (rnd() > 0.25 + dark * 1.1) continue;
     const r = 0.38 + dark * 1.15;
-    g.fillStyle = `rgba(104,107,103,${0.38 + dark * 0.5})`;
+    g.fillStyle = `rgba(${COL.ter},${0.38 + dark * 0.5})`;
     g.beginPath(); g.arc(px, py, r, 0, 6.283); g.fill();
   }
   return c;
@@ -54,8 +64,8 @@ function renderCar(rings, R, grid, N) {
   const c = document.createElement('canvas'); c.width = P; c.height = P;
   const g = c.getContext('2d'); seed = 5;
   g.save(); polyPath(g, rings, R); g.clip('evenodd');
-  g.fillStyle = 'rgba(52,70,95,0.10)'; g.fillRect(0, 0, P, P);
-  g.strokeStyle = 'rgba(40,56,80,0.9)'; g.lineWidth = 1.05; g.lineCap = 'round';
+  g.fillStyle = COL.carFill; g.fillRect(0, 0, P, P);
+  g.strokeStyle = COL.carStroke; g.lineWidth = 1.05; g.lineCap = 'round';
   const cell = P / N;
   for (let y = 0; y < P; y += 3) for (let x = 0; x < P; x += 3) {
     const px = x + rnd() * 3, py = y + rnd() * 3;
@@ -113,8 +123,9 @@ export function mount(root, cfg) {
   const STEPS = [
     { key: 'car', mph: 0, min: 30 }, { key: 'a', mph: 120, min: 30 }, { key: 'b', mph: 250, min: 30 }, { key: 'c', mph: 250, min: 90 },
   ];
-  const LEG = [['car', 'Car · 30 min', COL.car, 0], ['a', '120 mph · 30 min', COL.a, 1], ['b', '250 mph · 30 min', COL.b, 2], ['c', '250 mph · 90 min', COL.c, 3]];
-  $('.fcv-legend').innerHTML = LEG.map((l) => `<span data-s="${l[3]}"><i style="background:${l[2]}"></i>${l[1]}</span>`).join('');
+  const LEGK = [['car', 'Car · 30 min', 0], ['a', '120 mph · 30 min', 1], ['b', '250 mph · 30 min', 2], ['c', '250 mph · 90 min', 3]];
+  $('.fcv-legend').innerHTML = LEGK.map((l) => `<span data-s="${l[2]}"><i data-k="${l[0]}"></i>${l[1]}</span>`).join('');
+  const paintLeg = () => root.querySelectorAll('.fcv-legend i').forEach((i) => { i.style.background = COL[i.dataset.k]; }); paintLeg();
   $('.fcv-dots').innerHTML = STEPS.map((_, i) => `<button type="button" data-s="${i}" aria-label="Step ${i + 1}"></button>`).join('');
 
   const S = { city: cfg.cities.find((c) => c.id === (cfg.start || 'sf')) ? (cfg.start || 'sf') : cfg.cities[0].id, step: 0, span: 60, from: 60, to: 60, t: 1, play: true, last: 0, stepAt: 0, data: null, num: 0, numFrom: 0, numTo: 0, numT: 1, cards: [] };
@@ -201,25 +212,25 @@ export function mount(root, cfg) {
     if (S.step === 2) { drawOff(d.circ.b.canvas, LAYERS.mid.R, appear); ring(125, COL.b, '30 min · 250 mph', 0.55, appear); }
     if (S.step === 3) { drawOff(d.circ.b.canvas, LAYERS.mid.R, 0.8); drawOff(d.circ.c.canvas, LAYERS.wide.R, appear); ring(125, COL.b, '30 min · 250 mph', 0.3, 1); ring(375, COL.c, '90 min · 250 mph', 0.8, appear); }
     // city marker
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = COL.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(0), Y(0), 5, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.arc(X(0), Y(0), 2, 0, 6.283); ctx.fill();
+    ctx.fillStyle = COL.panel; ctx.strokeStyle = COL.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(0), Y(0), 5, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.arc(X(0), Y(0), 2, 0, 6.283); ctx.fill();
     // cards
-    const color = S.step === 1 ? COL.a : S.step === 2 ? COL.b : COL.c; const dark = S.step === 3 ? '#a8730c' : color;
+    const color = S.step === 1 ? COL.a : S.step === 2 ? COL.b : COL.c; const dark = S.step === 3 ? COL.cdark : color;
     const placed = []; const ca = Math.max(0, Math.min(1, (sinceStep - 0.5) / 0.6));
     S.cards.forEach((c, k) => {
       const px = X(c.dx), py = Y(c.dy); if (px < -20 || px > W + 20 || py < -20 || py > H + 20) return;
       ctx.globalAlpha = ca; ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(X(0), Y(0)); const mx = (X(0) + px) / 2 + (py - Y(0)) * 0.18, my = (Y(0) + py) / 2 - (px - X(0)) * 0.18; ctx.quadraticCurveTo(mx, my, px, py); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(px, py, 4, 0, 6.283); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = COL.panel; ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(px, py, 4, 0, 6.283); ctx.fill(); ctx.stroke();
       const cw = Math.min(176, W * 0.42), ch = 62; let bx = px + 10, by = py - ch - 8; if (bx + cw > W - 6) bx = px - cw - 10; if (by < 92) by = py + 12; if (by + ch > H - 52) by = H - 52 - ch;
       for (const p of placed) if (bx < p.x + p.w && bx + cw > p.x && by < p.y + p.h && by + ch > p.y) by = p.y + p.h + 6 > H - 52 - ch ? p.y - ch - 6 : p.y + p.h + 6;
       placed.push({ x: bx, y: by, w: cw, h: ch });
-      ctx.shadowColor = 'rgba(0,0,0,.16)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 2; ctx.fillStyle = '#fff'; roundRect(ctx, bx, by, cw, ch, 8); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.shadowColor = COL.shadow; ctx.shadowBlur = 10; ctx.shadowOffsetY = 2; ctx.fillStyle = COL.panel; roundRect(ctx, bx, by, cw, ch, 8); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
       ctx.fillStyle = COL.ink; ctx.textBaseline = 'alphabetic'; ctx.font = '600 12.5px Inter, system-ui, sans-serif'; ctx.fillText(c.name, bx + 10, by + 18);
-      if (c.tag) { const nw = ctx.measureText(c.name).width; ctx.fillStyle = '#85827a'; ctx.font = '11px Inter, system-ui, sans-serif'; ctx.fillText('· ' + c.tag, bx + 14 + nw, by + 18); }
+      if (c.tag) { const nw = ctx.measureText(c.name).width; ctx.fillStyle = COL.mute; ctx.font = '11px Inter, system-ui, sans-serif'; ctx.fillText('· ' + c.tag, bx + 14 + nw, by + 18); }
       ctx.fillStyle = dark; ctx.font = '700 21px Inter, system-ui, sans-serif'; ctx.fillText(c.fly + ' min', bx + 10, by + 43);
-      const fw = ctx.measureText(c.fly + ' min').width; ctx.fillStyle = '#85827a'; ctx.font = '11px Inter, system-ui, sans-serif'; ctx.fillText(c.car == null ? 'no drive route' : `${fmtMin(c.car)} by car`, bx + 16 + fw, by + 43); ctx.globalAlpha = 1;
+      const fw = ctx.measureText(c.fly + ' min').width; ctx.fillStyle = COL.mute; ctx.font = '11px Inter, system-ui, sans-serif'; ctx.fillText(c.car == null ? 'no drive route' : `${fmtMin(c.car)} by car`, bx + 16 + fw, by + 43); ctx.globalAlpha = 1;
     });
     // city label
-    ctx.font = '600 12px Inter, system-ui, sans-serif'; const nm = d.meta.name; const nw = ctx.measureText(nm).width + 16; ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.14)'; ctx.shadowBlur = 6; roundRect(ctx, X(0) - 4 - nw, Y(0) - 12, nw, 24, 6); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; ctx.fillStyle = COL.ink; ctx.textBaseline = 'middle'; ctx.fillText(nm, X(0) - nw + 4, Y(0));
+    ctx.font = '600 12px Inter, system-ui, sans-serif'; const nm = d.meta.name; const nw = ctx.measureText(nm).width + 16; ctx.fillStyle = COL.panel; ctx.shadowColor = COL.shadow; ctx.shadowBlur = 6; roundRect(ctx, X(0) - 4 - nw, Y(0) - 12, nw, 24, 6); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; ctx.fillStyle = COL.ink; ctx.textBaseline = 'middle'; ctx.fillText(nm, X(0) - nw + 4, Y(0));
   }
   function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function tick(now) {
@@ -241,8 +252,10 @@ export function mount(root, cfg) {
   $('.fcv-dots').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; S.play = false; paintPlay(); setStep(+b.dataset.s); });
   root.querySelector('.fcv-legend').addEventListener('click', (e) => { const s = e.target.closest('span'); if (!s) return; S.play = false; paintPlay(); setStep(+s.dataset.s); });
   sel.addEventListener('change', () => go(sel.value, 0));
+  const onTheme = () => { paintLeg(); for (const k of Object.keys(cache)) delete cache[k]; const keep = S.step; S.data = null; go(S.city, keep); };
+  window.addEventListener('fcv-theme', onTheme);
   window.addEventListener('resize', resize); resize(); paintPlay();
-  root.__fcv = { S, setStep, go, destroy() { dead = true; window.removeEventListener('resize', resize); } };
+  root.__fcv = { S, setStep, go, destroy() { dead = true; window.removeEventListener('resize', resize); window.removeEventListener('fcv-theme', onTheme); } };
   go(S.city, 0);
   requestAnimationFrame(tick);
   return root.__fcv;
